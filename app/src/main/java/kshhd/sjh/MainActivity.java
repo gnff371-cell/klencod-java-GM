@@ -6,393 +6,314 @@ import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.*;
-import android.text.InputType;
+
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
+import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.PlayerView;
+
+import java.util.ArrayList;
 
 public class MainActivity extends Activity {
 
-    private final int BG = 0xFF080B12;
-    private final int PANEL = 0xFF141A26;
-    private final int RED = 0xFFE32636;
-    private final int WHITE = 0xFFF5F6FA;
-    private final int MUTED = 0xFF929BAA;
+    private ExoPlayer player;
+    private PlayerView playerView;
+    private TextView status;
+    private LinearLayout channelsLayout;
+    private EditText urlInput;
 
-    private VideoView videoView;
-    private TextView playerMessage;
-    private TextView statusText;
+    private final ArrayList<String[]> channels = new ArrayList<>();
 
-    private int dp(float value) {
-        return (int)(value * getResources()
-                .getDisplayMetrics().density);
-    }
+    private int red = Color.rgb(235, 35, 55);
+    private int background = Color.rgb(12, 14, 19);
+    private int cardColor = Color.rgb(25, 28, 36);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(BG);
-        getWindow().setNavigationBarColor(BG);
+        getWindow().setStatusBarColor(background);
+        getWindow().setNavigationBarColor(background);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        root.setBackgroundColor(BG);
+        channels.add(new String[]{"SPORT LIVE 01", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"});
+        channels.add(new String[]{"SPORT LIVE 02", ""});
+        channels.add(new String[]{"SPORT LIVE 03", ""});
+        channels.add(new String[]{"SPORT LIVE 04", ""});
 
-        // HEADER
+        createPlayer();
+        createInterface();
+    }
+
+    private void createPlayer() {
+        player = new ExoPlayer.Builder(this).build();
+    }
+
+    private void createInterface() {
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(background);
+
+        LinearLayout main = new LinearLayout(this);
+        main.setOrientation(LinearLayout.VERTICAL);
+        main.setPadding(dp(16), dp(18), dp(16), dp(25));
+
+        scroll.addView(main);
+        setContentView(scroll);
+
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(18), dp(15), dp(18), dp(15));
-        header.setBackgroundColor(PANEL);
-
-        LinearLayout brand = new LinearLayout(this);
-        brand.setOrientation(LinearLayout.VERTICAL);
+        header.setOrientation(LinearLayout.HORIZONTAL);
 
         TextView logo = new TextView(this);
-        logo.setText("SPORT LIVE");
-        logo.setTextColor(RED);
-        logo.setTextSize(23);
+        logo.setText("SPORT ");
+        logo.setTextColor(Color.WHITE);
+        logo.setTextSize(25);
         logo.setTypeface(null, Typeface.BOLD);
 
+        TextView live = new TextView(this);
+        live.setText("LIVE");
+        live.setTextColor(red);
+        live.setTextSize(25);
+        live.setTypeface(null, Typeface.BOLD);
+
+        header.addView(logo);
+        header.addView(live);
+
         TextView subtitle = new TextView(this);
-        subtitle.setText("عالم الرياضة بين يديك");
-        subtitle.setTextColor(MUTED);
-        subtitle.setTextSize(11);
+        subtitle.setText("منصتك الرياضية للبث المباشر");
+        subtitle.setTextColor(Color.LTGRAY);
+        subtitle.setTextSize(13);
+        subtitle.setPadding(0, dp(5), 0, dp(15));
 
-        brand.addView(logo);
-        brand.addView(subtitle);
+        main.addView(header);
+        main.addView(subtitle);
 
-        header.addView(brand,
-                new LinearLayout.LayoutParams(0, -2, 1));
+        TextView section = new TextView(this);
+        section.setText("المباراة الآن");
+        section.setTextColor(Color.WHITE);
+        section.setTextSize(18);
+        section.setTypeface(null, Typeface.BOLD);
+        section.setPadding(0, dp(8), 0, dp(12));
+        main.addView(section);
 
-        Button search = button("بحث");
-        header.addView(search);
+        playerView = new PlayerView(this);
+        playerView.setPlayer(player);
+        playerView.setUseController(true);
+        playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
 
-        search.setOnClickListener(v -> showSearch());
+        GradientDrawable playerBg = new GradientDrawable();
+        playerBg.setColor(Color.BLACK);
+        playerBg.setCornerRadius(dp(14));
+        playerView.setBackground(playerBg);
+        playerView.setClipToOutline(true);
 
-        root.addView(header);
+        main.addView(playerView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(215)));
 
-        // MAIN SCROLL
-        ScrollView scroll = new ScrollView(this);
+        status = new TextView(this);
+        status.setText("اختر قناة لبدء المشاهدة");
+        status.setTextColor(Color.LTGRAY);
+        status.setTextSize(12);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(0, dp(10), 0, dp(10));
+        main.addView(status);
 
-        LinearLayout content = new LinearLayout(this);
-        content.setPadding(dp(15), dp(15), dp(15), dp(25));
-        content.setOrientation(LinearLayout.VERTICAL);
+        Button addButton = makeButton("+ إضافة رابط بث");
+        addButton.setOnClickListener(v -> showUrlDialog());
+        main.addView(addButton);
 
-        // LIVE TITLE
-        TextView liveTitle = text("البث المباشر", 20, WHITE, true);
-        content.addView(liveTitle);
+        TextView channelTitle = new TextView(this);
+        channelTitle.setText("القنوات الرياضية");
+        channelTitle.setTextColor(Color.WHITE);
+        channelTitle.setTextSize(19);
+        channelTitle.setTypeface(null, Typeface.BOLD);
+        channelTitle.setPadding(0, dp(22), 0, dp(12));
+        main.addView(channelTitle);
 
-        TextView liveSubtitle =
-                text("شاهد قنواتك الرياضية المفضلة", 12, MUTED, false);
+        channelsLayout = new LinearLayout(this);
+        channelsLayout.setOrientation(LinearLayout.VERTICAL);
+        main.addView(channelsLayout);
 
-        LinearLayout.LayoutParams subParams =
-                new LinearLayout.LayoutParams(-1, -2);
-        subParams.topMargin = dp(5);
-        subParams.bottomMargin = dp(14);
-        content.addView(liveSubtitle, subParams);
+        refreshChannels();
+    }
 
-        // VIDEO PLAYER
-        FrameLayout player = new FrameLayout(this);
-        player.setBackgroundColor(Color.BLACK);
+    private void refreshChannels() {
+        channelsLayout.removeAllViews();
 
-        videoView = new VideoView(this);
+        for (int i = 0; i < channels.size(); i++) {
+            final int index = i;
 
-        player.addView(videoView,
-                new FrameLayout.LayoutParams(-1, -1));
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(14), dp(12), dp(14), dp(12));
 
-        playerMessage = text(
-                "SPORT LIVE\n\nاختر قناة لبدء المشاهدة",
-                16, WHITE, true);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(cardColor);
+            bg.setCornerRadius(dp(12));
+            row.setBackground(bg);
 
-        playerMessage.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(65));
+            params.bottomMargin = dp(9);
 
-        player.addView(playerMessage,
-                new FrameLayout.LayoutParams(-1, -1));
+            TextView name = new TextView(this);
+            name.setText(channels.get(i)[0]);
+            name.setTextColor(Color.WHITE);
+            name.setTextSize(15);
+            name.setTypeface(null, Typeface.BOLD);
+            name.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout.LayoutParams playerParams =
-                new LinearLayout.LayoutParams(-1, dp(215));
+            row.addView(name, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
 
-        playerParams.bottomMargin = dp(12);
+            TextView play = new TextView(this);
+            play.setText("▶ مشاهدة");
+            play.setTextColor(Color.WHITE);
+            play.setTextSize(13);
+            play.setGravity(Gravity.CENTER);
+            play.setPadding(dp(13), dp(9), dp(13), dp(9));
 
-        content.addView(player, playerParams);
+            GradientDrawable playBg = new GradientDrawable();
+            playBg.setColor(red);
+            playBg.setCornerRadius(dp(8));
+            play.setBackground(playBg);
 
-        statusText = text("المشغل جاهز", 12, MUTED, false);
-        content.addView(statusText);
+            row.addView(play);
 
-        // CATEGORIES
-        TextView categoryTitle =
-                text("التصنيفات الرياضية", 18, WHITE, true);
+            row.setOnClickListener(v -> {
+                String url = channels.get(index)[1];
 
-        LinearLayout.LayoutParams titleParams =
-                new LinearLayout.LayoutParams(-1, -2);
+                if (url == null || url.trim().isEmpty()) {
+                    showUrlDialogForChannel(index);
+                } else {
+                    playChannel(url);
+                }
+            });
 
-        titleParams.topMargin = dp(25);
-        titleParams.bottomMargin = dp(12);
-
-        content.addView(categoryTitle, titleParams);
-
-        LinearLayout categories = new LinearLayout(this);
-        categories.setOrientation(LinearLayout.HORIZONTAL);
-
-        String[] categoryNames = {
-                "الكل", "كرة القدم", "كرة السلة", "التنس"
-        };
-
-        for (String name : categoryNames) {
-            Button b = button(name);
-
-            LinearLayout.LayoutParams p =
-                    new LinearLayout.LayoutParams(-2, dp(42));
-
-            p.setMargins(dp(3), 0, dp(3), 0);
-            categories.addView(b, p);
-
-            b.setOnClickListener(v ->
-                    Toast.makeText(this,
-                            name, Toast.LENGTH_SHORT).show());
+            channelsLayout.addView(row, params);
         }
-
-        content.addView(categories);
-
-        // CHANNELS
-        TextView channelsTitle =
-                text("القنوات الرياضية", 19, WHITE, true);
-
-        LinearLayout.LayoutParams channelTitleParams =
-                new LinearLayout.LayoutParams(-1, -2);
-
-        channelTitleParams.topMargin = dp(25);
-        channelTitleParams.bottomMargin = dp(12);
-
-        content.addView(channelsTitle, channelTitleParams);
-
-        addChannel(content,
-                "قناة رياضية 01",
-                "قناة تجريبية - أضف رابط البث الخاص بك");
-
-        addChannel(content,
-                "قناة رياضية 02",
-                "قناة تجريبية - أضف رابط البث الخاص بك");
-
-        addChannel(content,
-                "قناة رياضية 03",
-                "قناة تجريبية - أضف رابط البث الخاص بك");
-
-        // FOOTER
-        TextView footer = text(
-                "SPORT LIVE  |  الإصدار 1.0",
-                11, MUTED, false);
-
-        footer.setGravity(Gravity.CENTER);
-
-        LinearLayout.LayoutParams footerParams =
-                new LinearLayout.LayoutParams(-1, dp(45));
-
-        footerParams.topMargin = dp(15);
-
-        content.addView(footer, footerParams);
-
-        scroll.addView(content);
-        root.addView(scroll,
-                new LinearLayout.LayoutParams(-1, 0, 1));
-
-        setContentView(root);
-
-        videoView.setOnPreparedListener(mp -> {
-            playerMessage.setVisibility(View.GONE);
-            statusText.setText("يتم تشغيل البث");
-        });
-
-        videoView.setOnErrorListener((mp, what, extra) -> {
-            playerMessage.setVisibility(View.VISIBLE);
-            playerMessage.setText("تعذر تشغيل البث\nتحقق من الرابط");
-            statusText.setText("حدث خطأ في تشغيل الفيديو");
-            return true;
-        });
     }
 
-    // CHANNEL CARD
-    private void addChannel(LinearLayout parent,
-                            String name, String description) {
+    private void playChannel(String url) {
+        try {
+            if (url == null || url.trim().isEmpty()) {
+                status.setText("الرابط فارغ");
+                return;
+            }
 
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(13), dp(13), dp(13), dp(13));
-        card.setBackground(background(PANEL, 15));
+            String cleanUrl = url.trim();
 
-        LinearLayout info = new LinearLayout(this);
-        info.setOrientation(LinearLayout.VERTICAL);
+            MediaItem.Builder itemBuilder = new MediaItem.Builder()
+                    .setUri(cleanUrl);
 
-        TextView channelName = text(name, 15, WHITE, true);
-        TextView channelDescription =
-                text(description, 11, MUTED, false);
+            if (cleanUrl.toLowerCase().contains(".m3u8")) {
+                itemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
+            }
 
-        info.addView(channelName);
-        info.addView(channelDescription);
+            player.setMediaItem(itemBuilder.build());
+            player.prepare();
+            player.play();
 
-        card.addView(info,
-                new LinearLayout.LayoutParams(0, -2, 1));
-
-        Button play = button("مشاهدة");
-        card.addView(play);
-
-        View.OnClickListener listener =
-                v -> showStreamDialog(name);
-
-        card.setOnClickListener(listener);
-        play.setOnClickListener(listener);
-
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(-1, -2);
-
-        params.bottomMargin = dp(10);
-
-        parent.addView(card, params);
+            status.setText("جاري تشغيل البث...");
+        } catch (Exception e) {
+            status.setText("تعذر تشغيل الرابط");
+        }
     }
 
-    // STREAM URL DIALOG
-    private void showStreamDialog(String channelName) {
+    private void showUrlDialog() {
+        showUrlDialogForChannel(-1);
+    }
 
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setTextColor(WHITE);
-        input.setHintTextColor(MUTED);
-        input.setHint("https://example.com/live.m3u8");
-        input.setInputType(InputType.TYPE_CLASS_TEXT |
-                InputType.TYPE_TEXT_VARIATION_URI);
+    private void showUrlDialogForChannel(int channelIndex) {
 
         LinearLayout box = new LinearLayout(this);
-        box.setPadding(dp(20), dp(10), dp(20), dp(5));
-        box.addView(input);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(10), dp(18), dp(5));
+
+        EditText nameInput = new EditText(this);
+        nameInput.setHint("اسم القناة");
+        nameInput.setSingleLine(true);
+        box.addView(nameInput);
+
+        EditText linkInput = new EditText(this);
+        linkInput.setHint("رابط البث M3U8 أو MP4");
+        linkInput.setSingleLine(true);
+        linkInput.setInputType( android.text.InputType.TYPE_CLASS_TEXT |
+                android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        box.addView(linkInput);
 
         new AlertDialog.Builder(this)
-                .setTitle(channelName)
-                .setMessage("أدخل رابط البث المباشر:")
+                .setTitle("إضافة قناة")
                 .setView(box)
-                .setPositiveButton("تشغيل", (d, w) -> {
+                .setPositiveButton("حفظ وتشغيل", (dialog, which) -> {
 
-                    String url = input.getText().toString().trim();
+                    String name = nameInput.getText().toString().trim();
+                    String url = linkInput.getText().toString().trim();
 
-                    if (!url.startsWith("https://") &&
-                            !url.startsWith("http://")) {
-                        Toast.makeText(this,
-                                "الرابط غير صحيح",
-                                Toast.LENGTH_SHORT).show();
+                    if (url.isEmpty()) {
+                        status.setText("أدخل رابط البث أولاً");
                         return;
                     }
 
-                    playStream(url);
+                    if (name.isEmpty()) {
+                        name = "قناة جديدة";
+                    }
+
+                    if (channelIndex >= 0) {
+                        channels.set(channelIndex, new String[]{name, url});
+                    } else {
+                        channels.add(new String[]{name, url});
+                    }
+
+                    refreshChannels();
+                    playChannel(url);
                 })
                 .setNegativeButton("إلغاء", null)
                 .show();
     }
 
-    // PLAY STREAM
-    private void playStream(String url) {
-
-        try {
-            playerMessage.setVisibility(View.VISIBLE);
-            playerMessage.setText("جارٍ الاتصال بالبث...");
-
-            statusText.setText("جارٍ تحميل الفيديو");
-
-            videoView.stopPlayback();
-            videoView.setVideoURI(Uri.parse(url));
-
-            MediaController controller =
-                    new MediaController(this);
-
-            controller.setAnchorView(videoView);
-            videoView.setMediaController(controller);
-
-            videoView.start();
-
-        } catch (Exception e) {
-            playerMessage.setVisibility(View.VISIBLE);
-            playerMessage.setText("تعذر تشغيل الرابط");
-        }
-    }
-
-    // SEARCH
-    private void showSearch() {
-
-        EditText input = new EditText(this);
-        input.setHint("اسم القناة");
-
-        new AlertDialog.Builder(this)
-                .setTitle("البحث عن قناة")
-                .setView(input)
-                .setPositiveButton("بحث", (d, w) -> {
-
-                    String query =
-                            input.getText().toString().trim();
-
-                    Toast.makeText(this,
-                            "البحث عن: " + query,
-                            Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("إلغاء", null)
-                .show();
-    }
-
-    private TextView text(String value, int size,
-                          int color, boolean bold) {
-
-        TextView t = new TextView(this);
-        t.setText(value);
-        t.setTextSize(size);
-        t.setTextColor(color);
-
-        if (bold) {
-            t.setTypeface(null, Typeface.BOLD);
-        }
-
-        return t;
-    }
-
-    private Button button(String value) {
-
-        Button b = new Button(this);
-        b.setText(value);
-        b.setTextSize(12);
-        b.setAllCaps(false);
-        b.setTextColor(WHITE);
-        b.setPadding(dp(10), 0, dp(10), 0);
-        b.setBackground(background(RED, 11));
-
-        return b;
-    }
-
-    private GradientDrawable background(int color, int radius) {
+    private Button makeButton(String text) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(14);
+        button.setAllCaps(false);
 
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(color);
-        bg.setCornerRadius(dp(radius));
+        bg.setColor(red);
+        bg.setCornerRadius(dp(12));
+        button.setBackground(bg);
 
-        return bg;
+        return button;
+    }
+
+    private int dp(float value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onStop() {
+        super.onStop();
 
-        if (videoView != null && videoView.isPlaying()) {
-            videoView.pause();
+        if (player != null) {
+            player.pause();
         }
     }
 
     @Override
     protected void onDestroy() {
-        if (videoView != null) {
-            videoView.stopPlayback();
-        }
-
         super.onDestroy();
+
+        if (player != null) {
+            player.release();
+            player = null;
+        }
     }
 }
